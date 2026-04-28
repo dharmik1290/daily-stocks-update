@@ -1,0 +1,141 @@
+name: Rediff Gainers & Losers — Daily Scraper
+
+# ──────────────────────────────────────────────────────────────
+# Triggers:
+#   1. Cron: Daily at 3:35 PM IST (10:05 AM UTC)
+#   2. Push / PR to main or master
+#   3. Manual trigger (workflow_dispatch)
+# ──────────────────────────────────────────────────────────────
+on:
+  schedule:
+    # 3:35 PM IST = 10:05 AM UTC (IST is UTC+5:30)
+    - cron: '5 10 * * *'
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch: # Allow manual trigger from GitHub UI
+
+jobs:
+  scrape-and-report:
+    name: 📊 Scrape Rediff & Email Report
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout code ──────────────────────────────────
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Setup Node.js ──────────────────────────────────
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      # ── 3. Install dependencies ───────────────────────────
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      # ── 4. Install Playwright browsers ────────────────────
+      - name: 🌐 Install Playwright Browsers
+        run: npx playwright install --with-deps chromium
+
+      # ── 5. Run the scraper test ───────────────────────────
+      - name: 🚀 Run Playwright Scraper
+        id: test_run
+        continue-on-error: true
+        run: npx playwright test tests/test1.spec.ts --reporter=html
+
+      # ── 6. Set test result status ─────────────────────────
+      - name: 📝 Set test result
+        id: result
+        if: always()
+        run: |
+          if [ "${{ steps.test_run.outcome }}" == "success" ]; then
+            echo "status=✅ PASSED" >> $GITHUB_OUTPUT
+            echo "emoji=🟢" >> $GITHUB_OUTPUT
+          else
+            echo "status=❌ FAILED" >> $GITHUB_OUTPUT
+            echo "emoji=🔴" >> $GITHUB_OUTPUT
+          fi
+          echo "date=$(date +'%d-%b-%Y %I:%M %p UTC')" >> $GITHUB_OUTPUT
+
+      # ── 7. Upload artifacts ───────────────────────────────
+      - name: 📁 Upload Playwright Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 30
+
+      - name: 📁 Upload Excel File
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rediff-excel-data
+          path: Rediff_Gainers_Losers.xlsx
+          retention-days: 30
+
+      # ── 8. Send email with report & Excel ─────────────────
+      - name: 📧 Send Email Report
+        if: always()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.SENDER_EMAIL }}
+          password: ${{ secrets.SENDER_PASSWORD }}
+          subject: "${{ steps.result.outputs.emoji }} Rediff Scraper Report — ${{ steps.result.outputs.status }} — ${{ steps.result.outputs.date }}"
+          to: rubixc979@gmail.com
+          from: Rediff Scraper Bot <${{ secrets.SENDER_EMAIL }}>
+          html_body: |
+            <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8f9fa; padding: 24px; border-radius: 12px;">
+              
+              <div style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: white; padding: 24px; border-radius: 10px; text-align: center;">
+                <h1 style="margin: 0; font-size: 22px;">📊 Rediff Money — Daily Scraper Report</h1>
+                <p style="margin: 8px 0 0; opacity: 0.8; font-size: 14px;">${{ steps.result.outputs.date }}</p>
+              </div>
+              
+              <div style="background: white; padding: 20px; border-radius: 10px; margin-top: 16px; border: 1px solid #e0e0e0;">
+                <table style="width: 100%; border-collapse: collapse;">
+                  <tr>
+                    <td style="padding: 10px; font-weight: bold; color: #555;">Status:</td>
+                    <td style="padding: 10px; font-size: 16px;">${{ steps.result.outputs.status }}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px; font-weight: bold; color: #555;">Workflow:</td>
+                    <td style="padding: 10px;">${{ github.workflow }}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px; font-weight: bold; color: #555;">Triggered by:</td>
+                    <td style="padding: 10px;">${{ github.event_name }}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px; font-weight: bold; color: #555;">Branch:</td>
+                    <td style="padding: 10px;">${{ github.ref_name }}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 10px; font-weight: bold; color: #555;">Run ID:</td>
+                    <td style="padding: 10px;">
+                      <a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" style="color: #1976d2;">#${{ github.run_id }}</a>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+              
+              <div style="background: white; padding: 20px; border-radius: 10px; margin-top: 16px; border: 1px solid #e0e0e0;">
+                <h3 style="margin-top: 0; color: #333;">📎 Attachments</h3>
+                <ul style="color: #555; line-height: 1.8;">
+                  <li><strong>Rediff_Gainers_Losers.xlsx</strong> — Scraped data (Gainers + Losers sheets)</li>
+                  <li><strong>Playwright HTML Report</strong> — Download from <a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" style="color: #1976d2;">GitHub Actions Artifacts</a></li>
+                </ul>
+              </div>
+              
+              <p style="text-align: center; color: #999; font-size: 12px; margin-top: 16px;">
+                Automated by GitHub Actions · ${{ github.repository }}
+              </p>
+            </div>
+          attachments: Rediff_Gainers_Losers.xlsx,playwright-report/index.html
