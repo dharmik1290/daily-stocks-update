@@ -9,7 +9,7 @@ name: Rediff Gainers & Losers — Daily Scraper
 on:
   schedule:
     # 3:35 PM IST = 10:05 AM UTC (IST is UTC+5:30)
-    - cron: '*/5 * * * *'
+    - cron: '5 10 * * *'
   push:
     branches: [main, master]
   pull_request:
