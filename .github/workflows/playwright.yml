@@ -59,7 +59,7 @@ jobs:
             echo "status=❌ FAILED" >> $GITHUB_OUTPUT
             echo "emoji=🔴" >> $GITHUB_OUTPUT
           fi
-          echo "date=$(date)" >> $GITHUB_OUTPUT
+          echo "date=$(TZ='Asia/Kolkata' date '+%Y-%m-%d %H:%M:%S IST')" >> $GITHUB_OUTPUT
 
       # ── 7. Upload artifacts ───────────────────────────────
       - name: 📁 Upload Playwright Report
